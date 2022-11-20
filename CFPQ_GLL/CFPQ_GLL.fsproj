@@ -6,6 +6,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="Common.fs" />
         <Compile Include="InputGraph.fs" />
         <Compile Include="RSM.fs" />
         <Compile Include="SPPF.fs" />
@@ -14,7 +15,9 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="BenchmarkDotNet" Version="0.13.2" />
       <PackageReference Include="FSharpx.Collections" Version="3.0.1" />
+      <PackageReference Update="FSharp.Core" Version="5.0.2" />
     </ItemGroup>
 
 </Project>

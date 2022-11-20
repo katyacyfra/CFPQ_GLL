@@ -9,6 +9,8 @@
     <ItemGroup>
         <Compile Include="InputGraph.fs" />
         <Compile Include="GLLTests.fs" />
+        <Compile Include="DistancesTests.fs" />
+        <Compile Include="Benchmark.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
 
@@ -17,8 +19,10 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="BenchmarkDotNet" Version="0.13.2" />
       <PackageReference Include="Expecto" Version="9.0.4" />
       <PackageReference Include="Expecto.FsCheck" Version="9.0.4" />
+      <PackageReference Update="FSharp.Core" Version="5.0.2" />
     </ItemGroup>
 
 </Project>

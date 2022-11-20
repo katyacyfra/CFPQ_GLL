@@ -3,7 +3,6 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <TargetFramework>net5.0</TargetFramework>
-        <WarnOn>3390;$(WarnOn)</WarnOn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -11,14 +10,9 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\Benchmarks\Benchmarks.fsproj" />
       <ProjectReference Include="..\CFPQ_GLL\CFPQ_GLL.fsproj" />
       <ProjectReference Include="..\Tests\Tests.fsproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="Argu" Version="6.1.1" />
-      <PackageReference Include="BenchmarkDotNet" Version="0.13.2" />
-      <PackageReference Update="FSharp.Core" Version="5.0.2" />
     </ItemGroup>
 
 </Project>

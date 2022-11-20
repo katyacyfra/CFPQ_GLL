@@ -2,7 +2,7 @@ module CFPQ_GLL.SPPF
 
 open System
 open System.Collections.Generic
-open CFPQ_GLL
+open CFPQ_GLL.Common
 open CFPQ_GLL.InputGraph
 open CFPQ_GLL.RSM
 open Microsoft.FSharp.Core
@@ -10,159 +10,308 @@ open FSharpx.Collections
 
 type Distance = Unreachable | Reachable of int
 
-[<Struct>]
-type TerminalNode =
-    val Terminal : int<terminalSymbol>
-    val LeftPosition : int<inputGraphVertex>
-    val RightPosition : int<inputGraphVertex>
-    new (terminal, leftPosition, rightPosition)  =
-        {
-            Terminal = terminal
-            LeftPosition = leftPosition
-            RightPosition = rightPosition
-        }
+type TerminalNode (terminal: int<terminalSymbol>, graphRange: Range<IInputGraphVertex>) =
+    let parents = HashSet<IRangeNode>()
+    let mutable distance = 1<distance>
+    member this.Terminal = terminal
+    member this.LeftPosition = graphRange.StartPosition
+    member this.RightPosition = graphRange.EndPosition
+    member this.Range = graphRange    
+    interface ITerminalNode with
+        member this.Parents = parents        
+        member this.Distance
+            with get () = distance
+            and set v = distance <- v
 
-[<Struct>]
-type EpsilonNode =    
-    val Position : int<inputGraphVertex>
-    val NonTerminalStartState : int<rsmState>
+and [<Struct>] EpsilonNode =    
+    val Position : IInputGraphVertex
+    val NonTerminalStartState : IRsmState
     new (position, nonTerminalStartState)  =
         {            
             Position = position
             NonTerminalStartState = nonTerminalStartState
         }
+    interface IEpsilonNode
 
-type IntermediateNode (rsmState:int<rsmState>
-                       , inputPosition:int<inputGraphVertex>
-                       , leftSubtree: RangeNode
-                       , rightSubtree: RangeNode) =
+and IntermediateNode (rsmState:IRsmState
+                       , inputPosition:IInputGraphVertex
+                       , leftSubtree: IRangeNode
+                       , rightSubtree: IRangeNode) =
+    let parents = HashSet<IRangeNode>()
+    let mutable distance = leftSubtree.Distance + rightSubtree.Distance        
     member this.RSMState = rsmState
     member this.InputPosition = inputPosition
     member this.LeftSubtree = leftSubtree
-    member this.RightSubtree = rightSubtree
+    member this.RightSubtree = rightSubtree    
+    interface IIntermediateNode with
+        member this.Parents = parents    
+        member this.Distance
+            with get () = distance
+            and set v = distance <- v
 
-and RangeNode (inputStartPosition: int<inputGraphVertex>
-               , inputEndPosition: int<inputGraphVertex>
-               , rsmStartPosition: int<rsmState>
-               , rsmEndPosition: int<rsmState>
-               , intermediateNodes: ResizeArray<NonRangeNode>) =
-    member this.InputStartPosition = inputStartPosition
-    member this.InputEndPosition = inputEndPosition
-    member this.RSMStartPosition = rsmStartPosition
-    member this.RSMEndPosition = rsmEndPosition
-    member this.IntermediateNodes = intermediateNodes    
-  
+and RangeNode (matchedRange: MatchedRange, intermediateNodes: HashSet<NonRangeNode>) =
+    let mutable distance =
+        let mutable minDistance = Int32.MaxValue * 1<distance>
+        for node in intermediateNodes do
+            minDistance <- min minDistance node.Distance            
+        minDistance
+    let parents = HashSet<NonRangeNode>()    
+            
+    member this.InputStartPosition = matchedRange.InputRange.StartPosition
+    member this.InputEndPosition = matchedRange.InputRange.EndPosition
+    member this.RSMStartPosition = matchedRange.RSMRange.StartPosition
+    member this.RSMEndPosition = matchedRange.RSMRange.EndPosition        
+    interface IRangeNode with
+        member this.Distance
+            with get () = distance
+            and set v = distance <- v
+        member this.Parents = parents
+        member this.IntermediateNodes = intermediateNodes
+
+(*  
 and [<Struct>] IntermediatePoint =
-    val RSMState : int<rsmState>
+    val RSMState : IRsmState
     val InputPosition : int<inputGraphVertex>
     new (rsmState, inputPosition) = {RSMState = rsmState; InputPosition = inputPosition}
+*)
 
-and [<Struct>] NonTerminalNode =
-    val NonTerminalStartState : int<rsmState>
-    val LeftPosition : int<inputGraphVertex>
-    val RightPosition : int<inputGraphVertex>
-    val RangeNodes : array<RangeNode>
-    new (nonTerminalStartState, leftPosition, rightPosition, rangeNodes)  =
-        {
-            NonTerminalStartState = nonTerminalStartState
-            LeftPosition = leftPosition
-            RightPosition = rightPosition
-            RangeNodes = rangeNodes
-        }
-                
-and [<RequireQualifiedAccess>]NonRangeNode =
-    | TerminalNode of TerminalNode
-    | NonTerminalNode of NonTerminalNode
-    | EpsilonNode of EpsilonNode
-    | IntermediateNode of IntermediateNode
+and NonTerminalNode (nonTerminalStartState: IRsmState, graphRange: Range<IInputGraphVertex>, rangeNodes:ResizeArray<IRangeNode>) =
+    let parents = HashSet<IRangeNode>()
+    let mutable distance =
+        rangeNodes |> ResizeArray.fold (fun v n -> min v n.Distance) (Int32.MaxValue * 1<distance>) 
+    member this.NonTerminalStartState = nonTerminalStartState
+    member this.LeftPosition =graphRange.StartPosition
+    member this.RightPosition =graphRange.EndPosition
+    member this.RangeNodes = rangeNodes    
+    interface INonTerminalNode with
+        member this.Distance
+            with get () = distance
+            and set v = distance <- v
+        member this.Parents = parents
     
-and [<Struct>] Range<[<Measure>]'position> =
+
+(*and [<Struct>] Range<[<Measure>]'position> =
     val StartPosition: int<'position>
     val EndPosition: int<'position>
     new (startPosition, endPosition) = {StartPosition = startPosition; EndPosition = endPosition}
-
-[<RequireQualifiedAccess>]
-[<Struct>]
-type RangeType =    
-    | Terminal of terminal:int<terminalSymbol>
-    | NonTerminal of nonTerminal:int<rsmState>
-    | EpsilonNonTerminal of epsilonNonTerminal:int<rsmState>
-    | Intermediate of intermediatePoint: IntermediatePoint
-    | Empty
-    
-[<Struct>]
-type MatchedRange =
+*)
+(*and [<Struct>] MatchedRange =
     val InputRange : Range<inputGraphVertex>
     val RSMRange : Range<rsmState>
     new (inputRange, rsmRange) = {InputRange = inputRange; RSMRange = rsmRange}
     new (inputFrom, inputTo, rsmFrom, rsmTo) = {InputRange = Range<_>(inputFrom, inputTo); RSMRange = Range<_>(rsmFrom, rsmTo)}
 
 [<Struct>]
-type MatchedRangeWithType =
+type PartOfMatchedRange<'graphVertex> =
+    val InputStartPosition : 'graphVertex
+    val RSMRange : Range<rsmState>
+    new (matchedRange: MatchedRange) = {InputStartPosition = matchedRange.InputRange.StartPosition; RSMRange = matchedRange.RSMRange}
+*)
+(*[<Struct>]
+type MatchedRangeWithNode =
     val Range : MatchedRange
-    val RangeType: RangeType
-    new (range, rangeType) = {Range = range; RangeType = rangeType}
-    new (inputRange, rsmRange, rangeType) = {Range = MatchedRange(inputRange, rsmRange); RangeType = rangeType}
-    new (inputFrom, inputTo, rsmFrom, rsmTo, rangeType) = {Range = MatchedRange(inputFrom, inputTo, rsmFrom, rsmTo); RangeType = rangeType}
+    val Node: Option<RangeNode>
+    new (range, rangeNode) = {Range = range; Node = Some rangeNode}
+    new (inputRange, rsmRange, rangeNode) = {Range = MatchedRange(inputRange, rsmRange); Node = rangeNode}
+    new (inputFrom, inputTo, rsmFrom, rsmTo, rangeNode) = {Range = MatchedRange(inputFrom, inputTo, rsmFrom, rsmTo); Node = rangeNode}
+    new (inputFrom, inputTo, rsmFrom, rsmTo) = {Range = MatchedRange(inputFrom, inputTo, rsmFrom, rsmTo); Node = None}
 
-type MatchedRanges (query:RSM) =
-    let ranges : ResizeArray<HashSet<MatchedRangeWithType>> = ResizeArray<_>()
-    let rangesToTypes = Dictionary<MatchedRange, ResizeArray<RangeType>>()
-    let blockSize = 1000
+*)
+(*    
+[<Struct>]
+[<CustomComparison; StructuralEquality>]
+type DistanceInfo =
+    val Distance: int
+    val AtLeastOneMustHaveStateVisited: bool
+    new (distance, atLeastOneMustHaveStateVisited) =
+        {
+            Distance = distance
+            AtLeastOneMustHaveStateVisited = atLeastOneMustHaveStateVisited
+        }
+           
+    interface IComparable with
+        member this.CompareTo (y:obj) =
+            if y :? DistanceInfo
+            then
+                let y = y :?> DistanceInfo
+                if ((not this.AtLeastOneMustHaveStateVisited) && (not y.AtLeastOneMustHaveStateVisited))
+                   || (this.AtLeastOneMustHaveStateVisited && y.AtLeastOneMustHaveStateVisited)
+                then y.Distance.CompareTo this.Distance
+                elif this.AtLeastOneMustHaveStateVisited
+                then 1
+                else -1
+            else failwith "Incomparable."
+*)    
+
+type MatchedRanges () =    
     
-    member this.AddMatchedRange (matchedRange: MatchedRangeWithType) =        
-        let blockId = int matchedRange.Range.InputRange.StartPosition / blockSize 
-        if blockId >= ranges.Count
-        then ranges.AddRange(Array.init (blockId - ranges.Count + 1) (fun _ -> HashSet<_>()))
-        ranges.[blockId].Add matchedRange |> ignore
+    let updateDistances (rangeNode:IRangeNode) =
+        let cycle = HashSet<IRangeNode>()
+        let rec handleRangeNode (rangeNode:IRangeNode) =
+            if not <| cycle.Contains rangeNode
+            then
+                let added = cycle.Add rangeNode
+                assert added
+                let oldDistance = rangeNode.Distance 
+                let mutable newDistance = Int32.MaxValue * 1<distance>
+                for node in rangeNode.IntermediateNodes do
+                    newDistance <- min newDistance node.Distance            
+                if oldDistance > newDistance 
+                then
+                    rangeNode.Distance <- newDistance
+                    rangeNode.Parents
+                    |> Seq.iter handleNonRangeNode
+            let removed = cycle.Remove rangeNode
+            assert removed
+            
+        and handleNonRangeNode (node:NonRangeNode) =
+            match node with
+            | NonRangeNode.TerminalNode t -> failwith "Terminal node can not be parent."
+            | NonRangeNode.NonTerminalNode n -> handleNonTerminalNode n
+            | NonRangeNode.IntermediateNode i -> handleIntermediateNode i
+            | NonRangeNode.EpsilonNode _ -> failwith "Epsilon node can not be parent."
+            
+        and handleNonTerminalNode (node:INonTerminalNode) =            
+            let oldDistance = node.Distance
+            let _node = node :?> NonTerminalNode
+            let newDistance = _node.RangeNodes |> ResizeArray.fold (fun v n -> min v n.Distance) (Int32.MaxValue * 1<distance>)
+            if oldDistance > newDistance
+            then
+                node.Distance <- newDistance
+                node.Parents |> Seq.iter handleRangeNode
         
-        let exists, types = rangesToTypes.TryGetValue matchedRange.Range
+        and handleIntermediateNode (node:IIntermediateNode) =
+            let oldDistance = node.Distance
+            let _node = node :?> IntermediateNode
+            let newDistance = _node.LeftSubtree.Distance + _node.RightSubtree.Distance 
+            if oldDistance > newDistance
+            then
+                node.Distance <- newDistance
+                node.Parents |> Seq.iter handleRangeNode
+        
+        handleRangeNode rangeNode    
+    
+    member internal this.AddTerminalNode (range:Range<IInputGraphVertex>, terminal) =
+        let terminalNodes = range.EndPosition.TerminalNodes
+        let exists, nodes = terminalNodes.TryGetValue range.StartPosition
         if exists
-        then types.Add matchedRange.RangeType
-        else rangesToTypes.Add(matchedRange.Range,ResizeArray[|matchedRange.RangeType|])
-                    
-    member this.AddMatchedRange (leftSubRange: MatchedRangeWithType, rightSubRange: MatchedRangeWithType) =
-        match leftSubRange.RangeType with
-        | RangeType.Empty -> rightSubRange
-        | _ ->
-            let intermediatePoint = IntermediatePoint(
-                                        leftSubRange.Range.RSMRange.EndPosition
-                                        , leftSubRange.Range.InputRange.EndPosition)
-            let newRange = MatchedRangeWithType(leftSubRange.Range.InputRange.StartPosition
+        then
+            let exists, terminalNode = nodes.TryGetValue terminal
+            if exists
+            then terminalNode
+            else
+                let newTerminalNode = TerminalNode(terminal,range) :> ITerminalNode
+                nodes.Add(terminal, newTerminalNode)
+                newTerminalNode
+        else
+            let newTerminalNode = TerminalNode(terminal,range) :> ITerminalNode
+            let d = Dictionary<_,_>()
+            d.Add(terminal, newTerminalNode)
+            terminalNodes.Add(range.StartPosition, d)
+            newTerminalNode
+                
+    member internal this.AddNonTerminalNode (range:Range<IInputGraphVertex>, nonTerminalStartState:IRsmState) =
+        let rangeNodes = range.EndPosition.RangeNodes
+        let nonTerminalNodes = range.EndPosition.NonTerminalNodes
+        let exists, nodes = nonTerminalNodes.TryGetValue range.StartPosition        
+        let mkNewNonTerminal () =
+            let rangeNodes =
+                    let res = ResizeArray()
+                    for final in  nonTerminalStartState.Box.FinalStates do
+                        let matchedRange = MatchedRange (range, Range<IRsmState>(nonTerminalStartState, final))
+                        let exists, rangeNode = rangeNodes.TryGetValue matchedRange
+                        if exists then res.Add rangeNode
+                    res
+            let node = NonTerminalNode(nonTerminalStartState, range, rangeNodes)
+            rangeNodes |> ResizeArray.iter (fun n -> n.Parents.Add (NonRangeNode.NonTerminalNode node) |> ignore)
+            nonTerminalStartState.NonTerminalNodes.Add node
+            node :> INonTerminalNode
+            
+        if exists
+        then
+            let exists, nonTerminalNode = nodes.TryGetValue nonTerminalStartState
+            if exists
+            then nonTerminalNode
+            else
+                let newNonTerminalNode = mkNewNonTerminal ()
+                nodes.Add(nonTerminalStartState, newNonTerminalNode)
+                newNonTerminalNode
+        else
+            let newNonTerminalNode = mkNewNonTerminal ()
+            let d = Dictionary<_,_>()
+            d.Add(nonTerminalStartState, newNonTerminalNode)
+            nonTerminalNodes.Add(range.StartPosition, d)
+            newNonTerminalNode
+    
+    member internal this.AddToMatchedRange (matchedRange: MatchedRange, node:NonRangeNode) =
+        let rangeNodes = matchedRange.InputRange.EndPosition.RangeNodes
+        let exists, rangeNode = rangeNodes.TryGetValue matchedRange
+        if exists
+        then
+            rangeNode.IntermediateNodes.Add node |> ignore
+            node.Parents.Add rangeNode |> ignore
+
+            if node.Distance < rangeNode.Distance
+            then updateDistances rangeNode
+            
+            rangeNode
+        else
+            let rangeNode = RangeNode(matchedRange, HashSet<_> [|node|])
+            rangeNodes.Add(matchedRange, rangeNode)
+            rangeNode
+                            
+    member internal this.AddIntermediateNode (leftSubRange: MatchedRangeWithNode, rightSubRange: MatchedRangeWithNode) =
+        match leftSubRange.Node with
+        | None -> rightSubRange
+        | Some n ->
+            let intermediateNodes = rightSubRange.Range.InputRange.EndPosition.IntermediateNodes
+            let mkNode () =
+                let node = 
+                    IntermediateNode(
+                        leftSubRange.Range.RSMRange.EndPosition
+                        , leftSubRange.Range.InputRange.EndPosition
+                        , leftSubRange.Node.Value
+                        , rightSubRange.Node.Value
+                    )
+                let n = NonRangeNode.IntermediateNode node
+                leftSubRange.Node.Value.Parents.Add n |> ignore  
+                rightSubRange.Node.Value.Parents.Add n |> ignore
+                node :> IIntermediateNode
+            let intermediateNode =
+                let exists, rightPart = intermediateNodes.TryGetValue leftSubRange.Range
+                if exists
+                then
+                    let exists, intermediateNode = rightPart.TryGetValue rightSubRange.Range
+                    if exists
+                    then intermediateNode
+                    else
+                        let intermediateNode = mkNode()
+                        rightPart.Add(rightSubRange.Range, intermediateNode)
+                        intermediateNode
+                else
+                    let intermediateNode = mkNode()
+                    let d = Dictionary<_,_>()
+                    d.Add (rightSubRange.Range, intermediateNode)
+                    intermediateNodes.Add(leftSubRange.Range, d)
+                    intermediateNode
+                                        
+            let newMatchedRange = MatchedRange (leftSubRange.Range.InputRange.StartPosition
                                         , rightSubRange.Range.InputRange.EndPosition
                                         , leftSubRange.Range.RSMRange.StartPosition
-                                        , rightSubRange.Range.RSMRange.EndPosition
-                                        , RangeType.Intermediate intermediatePoint)
-            this.AddMatchedRange newRange
+                                        , rightSubRange.Range.RSMRange.EndPosition)
+            let rangeNode = this.AddToMatchedRange (newMatchedRange, NonRangeNode.IntermediateNode intermediateNode)
+            let newRange = MatchedRangeWithNode(newMatchedRange, rangeNode)
             newRange
-         
-    member private this.Ranges with get () = ranges
-    
-    member this.UnionWith (newRanges:MatchedRanges) =
-       if newRanges.Ranges.Count > this.Ranges.Count
-       then this.Ranges.AddRange(Array.init (newRanges.Ranges.Count - this.Ranges.Count) (fun _ -> HashSet<_>()))
-       else newRanges.Ranges.AddRange(Array.init (this.Ranges.Count - newRanges.Ranges.Count) (fun _ -> HashSet<_>()))
-       ResizeArray.iter2
-           (fun (_this:HashSet<_>) (_new:HashSet<_>) -> _this.UnionWith _new)
-           this.Ranges
-           newRanges.Ranges
-           
-    member this.GetRangesToTypes () =
-        let rangesToTypes = Dictionary<MatchedRange, ResizeArray<RangeType>>()
-        for block in ranges do
-            for range in block do
-                let exists, types = rangesToTypes.TryGetValue range.Range
-                if exists
-                then types.Add range.RangeType
-                else rangesToTypes.Add(range.Range,ResizeArray[|range.RangeType|])
-        rangesToTypes
-    
+
     member this.GetShortestDistances (
-            precomputedDistances:Dictionary<MatchedRange,int>,
-            //rangesToTypes: Dictionary<MatchedRange, ResizeArray<RangeType>>,
-            startVertices,
+            //query: RSM,
+            //finalStates:HashSet<int<rsmState>>,
+            //mustVisitStates:HashSet<int<rsmState>>,
+            //precomputedDistances:Dictionary<MatchedRange,DistanceInfo>,            
+            startVertex,
             finalVertices) =
-        
+        ResizeArray<_>()
+        (*
         let computedShortestDistances = precomputedDistances
         let cycles = HashSet<_>()
         let rec computeShortestDistance range =            
@@ -171,20 +320,23 @@ type MatchedRanges (query:RSM) =
             then computedDistance
             else
                 if cycles.Contains range
-                then Int32.MaxValue
+                then DistanceInfo (Int32.MaxValue, false)
                 else
                     cycles.Add range |> ignore
+                    let atLeastMustHaveStateVisited =
+                        mustVisitStates.Contains range.RSMRange.StartPosition
+                        || mustVisitStates.Contains range.RSMRange.EndPosition
                     let exists,types = rangesToTypes.TryGetValue range
                     if not exists
-                    then Int32.MaxValue
+                    then DistanceInfo (Int32.MaxValue, false)
                     else 
                     let distance =
                         [|
                             for rangeType in types ->
                                 match rangeType with
                                 | RangeType.Empty -> failwith "Empty range in shortest path."
-                                | RangeType.EpsilonNonTerminal _ -> 0
-                                | RangeType.Terminal _ -> 1
+                                | RangeType.EpsilonNonTerminal _ -> DistanceInfo (0,atLeastMustHaveStateVisited)
+                                | RangeType.Terminal _ -> DistanceInfo(1,atLeastMustHaveStateVisited)
                                 | RangeType.NonTerminal n ->
                                     let finalStates = query.GetFinalStatesForBoxWithThisStartState n
                                     [|
@@ -209,110 +361,41 @@ type MatchedRanges (query:RSM) =
                                                       pos.RSMState,
                                                       range.RSMRange.EndPosition)
                                         |> computeShortestDistance
-                                    leftRangeDistance + rightRangeDistance
+                                    DistanceInfo (leftRangeDistance.Distance + rightRangeDistance.Distance, atLeastMustHaveStateVisited || leftRangeDistance.AtLeastOneMustHaveStateVisited || rightRangeDistance.AtLeastOneMustHaveStateVisited) 
                         |]
-                        |> Array.filter (fun x -> x >= 0)
-                        |> fun a -> if a.Length > 0 then Array.min a else Int32.MaxValue
+                        |> Array.filter (fun x -> x.Distance >= 0)
+                        |> fun a -> if a.Length > 0 then Array.min a else DistanceInfo(Int32.MaxValue, false)
                     computedShortestDistances.Add(range, distance)
                     cycles.Remove range |> ignore
                     distance
         let res = ResizeArray<_>()
-        for startVertex in startVertices do
-            for finalVertex in finalVertices do
-                for finalState in query.OriginalFinalStates do
-                    MatchedRange(startVertex, finalVertex, query.OriginalStartState, finalState)
-                    |> computeShortestDistance
-                    |> fun distance -> res.Add (startVertex, finalVertex, if distance = Int32.MaxValue then Unreachable else Reachable distance)
+        let reachable = HashSet<_>()
+        //for startVertex in startVertices do
+        for finalVertex in finalVertices do
+            for finalState in finalStates do
+                MatchedRange(startVertex, finalVertex, query.OriginalStartState, finalState)
+                |> computeShortestDistance
+                |> fun (distance: DistanceInfo) ->                    
+                    res.Add (
+                        startVertex,
+                        finalVertex,
+                        if distance.Distance = Int32.MaxValue || not distance.AtLeastOneMustHaveStateVisited
+                        then Unreachable
+                        else
+                            reachable.Add (startVertex,finalVertex) |> ignore
+                            Reachable distance.Distance)
+        let res = 
+            HashSet res
+            |> Seq.filter
+                (fun (_from,_to,_d) ->
+                    let idReachable = reachable.Contains (_from,_to)  
+                    (idReachable && _d <> Unreachable)
+                    || (not idReachable)                    
+                )
+            |> ResizeArray
         res
-        
-    member this.ToSPPF (startVertices:array<int<inputGraphVertex>>) : ResizeArray<RangeNode>=
-        let rangeNodes = ResizeArray<RangeNode>()
-        
-        let isValidRange inputStart inputEnd rsmStart rsmEnd =
-            
-            ranges.[int inputStart / blockSize]
-            |> Seq.exists (fun range ->
-                range.Range.InputRange.StartPosition = inputStart
-                && range.Range.InputRange.EndPosition = inputEnd
-                && range.Range.RSMRange.StartPosition = rsmStart
-                && range.Range.RSMRange.EndPosition = rsmEnd)
-
-        let getRangeNode inputStart inputEnd rsmStart rsmEnd =            
-            let n =
-                rangeNodes
-                |> ResizeArray.tryFind (fun node -> node.InputStartPosition = inputStart
-                                                    && node.InputEndPosition = inputEnd
-                                                    && node.RSMStartPosition = rsmStart
-                                                    && node.RSMEndPosition = rsmEnd)
-            match n with
-            | Some n -> n
-            | None ->
-                let newRangeNode = RangeNode(inputStart, inputEnd, rsmStart, rsmEnd, ResizeArray<_>())
-                rangeNodes.Add newRangeNode
-                newRangeNode
-                
-        for block in ranges do
-            for range in block do                                    
-                let rangeNode =
-                    getRangeNode
-                        range.Range.InputRange.StartPosition
-                        range.Range.InputRange.EndPosition
-                        range.Range.RSMRange.StartPosition
-                        range.Range.RSMRange.EndPosition
-                match range.RangeType with
-                | RangeType.Empty -> failwith "Empty range in sppf construction."
-                | RangeType.EpsilonNonTerminal n ->
-                    EpsilonNode (range.Range.InputRange.StartPosition, n)
-                    |> NonRangeNode.EpsilonNode
-                    
-                | RangeType.Terminal t ->
-                    TerminalNode(t, range.Range.InputRange.StartPosition, range.Range.InputRange.EndPosition)
-                    |> NonRangeNode.TerminalNode
-                    
-                | RangeType.NonTerminal n ->
-                    let rangeNodes =
-                        [|
-                            for final in query.GetFinalStatesForBoxWithThisStartState n do
-                                if isValidRange
-                                       range.Range.InputRange.StartPosition
-                                       range.Range.InputRange.EndPosition
-                                       n
-                                       final
-                                then
-                                    yield
-                                     getRangeNode
-                                        range.Range.InputRange.StartPosition
-                                        range.Range.InputRange.EndPosition
-                                        n
-                                        final
-                        |]
-                    NonTerminalNode(n,
-                                    range.Range.InputRange.StartPosition,
-                                    range.Range.InputRange.EndPosition,
-                                    rangeNodes)
-                    |> NonRangeNode.NonTerminalNode
-                | RangeType.Intermediate intermediatePoint ->                                                                            
-                    let leftNode =
-                        getRangeNode
-                            range.Range.InputRange.StartPosition
-                            intermediatePoint.InputPosition
-                            range.Range.RSMRange.StartPosition
-                            intermediatePoint.RSMState
-                    let rightNode =
-                        getRangeNode
-                            intermediatePoint.InputPosition
-                            range.Range.InputRange.EndPosition
-                            intermediatePoint.RSMState
-                            range.Range.RSMRange.EndPosition                                
-                    IntermediateNode(intermediatePoint.RSMState, intermediatePoint.InputPosition, leftNode, rightNode)
-                    |> NonRangeNode.IntermediateNode
-                |> rangeNode.IntermediateNodes.Add                
-
-        rangeNodes
-        |> ResizeArray.filter (fun node -> node.RSMStartPosition = query.OriginalStartState
-                                           && query.IsFinalStateForOriginalStartBox node.RSMEndPosition
-                                           && startVertices |> Array.contains node.InputStartPosition)
-
+    *)    
+    
 [<RequireQualifiedAccess>]
 type TriplesStoredSPPFNode =
     | EpsilonNode of int<inputGraphVertex> * int<rsmState>
@@ -321,43 +404,78 @@ type TriplesStoredSPPFNode =
     | IntermediateNode of int<inputGraphVertex> * int<rsmState>
     | RangeNode of int<inputGraphVertex> * int<inputGraphVertex> * int<rsmState> * int<rsmState> 
 
-type TriplesStoredSPPF<'inputVertex when 'inputVertex: equality> (sppf:ResizeArray<RangeNode>) =
+type TriplesStoredSPPF<'inputVertex when 'inputVertex: equality> (roots:array<INonTerminalNode>, vertexMap:Dictionary<IInputGraphVertex,int<inputGraphVertex>>) =
+    let rsmStatesMap = Dictionary<IRsmState,int<rsmState>>()
+    let mutable firstFreeRsmStateId = 0<rsmState>
+    let getStateId state =
+        let exists,stateId = rsmStatesMap.TryGetValue state
+        if exists
+        then stateId
+        else
+            let stateId = firstFreeRsmStateId
+            rsmStatesMap.Add(state,stateId)
+            firstFreeRsmStateId <- firstFreeRsmStateId + 1<rsmState>
+            stateId
+            
+    let mutable firstFreeGraphVertexId =
+        if vertexMap.Values.Count = 0
+        then 0<inputGraphVertex>
+        else Seq.max vertexMap.Values + 1<inputGraphVertex>
+    let getVertexId vertex =
+        let exists,vertexId = vertexMap.TryGetValue vertex
+        if exists
+        then vertexId
+        else
+            let vertexId = firstFreeGraphVertexId
+            vertexMap.Add(vertex,vertexId)
+            firstFreeGraphVertexId <- firstFreeGraphVertexId + 1<inputGraphVertex>
+            vertexId
+            
     let mutable nodesCount = 0
     let nodes = Dictionary<_,TriplesStoredSPPFNode>()
     let edges = ResizeArray<_>()
-    let visitedRangeNodes = Dictionary<RangeNode,_>()
+    let visitedRangeNodes = Dictionary<IRangeNode,_>()
+    let visitedNonTerminalNodes = Dictionary<INonTerminalNode,_>()
     let addEdge parentId currentId =
         match parentId with
         | Some x -> edges.Add(x,currentId)
         | None -> ()
     
-    let rec handleIntermediateNode parentId (node:IntermediateNode) =
+    let rec handleIntermediateNode parentId (node:IIntermediateNode) =
+        let node = node :?> IntermediateNode
         let currentId = nodesCount
-        nodes.Add(currentId, TriplesStoredSPPFNode.IntermediateNode(node.InputPosition, node.RSMState))
+        nodes.Add(currentId, TriplesStoredSPPFNode.IntermediateNode(getVertexId node.InputPosition, getStateId node.RSMState))
         addEdge parentId currentId
         nodesCount <- nodesCount + 1
         handleRangeNode (Some currentId) node.LeftSubtree
         handleRangeNode (Some currentId) node.RightSubtree
     
-    and handleTerminalNode parentId (node:TerminalNode) =
+    and handleTerminalNode parentId (node:ITerminalNode) =
+        let node = node :?> TerminalNode
         let currentId = nodesCount
-        nodes.Add(currentId, TriplesStoredSPPFNode.TerminalNode(node.LeftPosition, node.Terminal, node.RightPosition))
+        nodes.Add(currentId, TriplesStoredSPPFNode.TerminalNode(getVertexId node.LeftPosition, node.Terminal, getVertexId node.RightPosition))
         addEdge parentId currentId
         nodesCount <- nodesCount + 1
         
-    and handleEpsilonNode parentId (node:EpsilonNode) =
+    and handleEpsilonNode parentId (node:IEpsilonNode) =
+        let node = node :?> EpsilonNode 
         let currentId = nodesCount
-        nodes.Add(currentId, TriplesStoredSPPFNode.EpsilonNode(node.Position, node.NonTerminalStartState))
+        nodes.Add(currentId, TriplesStoredSPPFNode.EpsilonNode(getVertexId node.Position, getStateId node.NonTerminalStartState))
         addEdge parentId currentId
         nodesCount <- nodesCount + 1
     
-    and handleNonTerminalNode parentId (node:NonTerminalNode) =
-        let currentId = nodesCount
-        nodes.Add(currentId, TriplesStoredSPPFNode.NonTerminalNode(node.LeftPosition, node.NonTerminalStartState, node.RightPosition))
-        addEdge parentId currentId
-        nodesCount <- nodesCount + 1
-        node.RangeNodes
-        |> Array.iter (handleRangeNode (Some currentId))
+    and handleNonTerminalNode parentId (node:INonTerminalNode) =
+        if visitedNonTerminalNodes.ContainsKey node
+        then addEdge parentId visitedNonTerminalNodes.[node]
+        else
+            let node = node :?> NonTerminalNode
+            let currentId = nodesCount
+            visitedNonTerminalNodes.Add(node, currentId)
+            nodes.Add(currentId, TriplesStoredSPPFNode.NonTerminalNode(getVertexId node.LeftPosition, getStateId node.NonTerminalStartState, getVertexId node.RightPosition))
+            addEdge parentId currentId
+            nodesCount <- nodesCount + 1
+            node.RangeNodes
+            |> ResizeArray.iter (handleRangeNode (Some currentId))
         
     and handleNonRangeNode parentId node =
         match node with
@@ -366,19 +484,23 @@ type TriplesStoredSPPF<'inputVertex when 'inputVertex: equality> (sppf:ResizeArr
         | NonRangeNode.EpsilonNode e -> handleEpsilonNode parentId e
         | NonRangeNode.IntermediateNode p -> handleIntermediateNode parentId p
         
-    and handleRangeNode parentId (node:RangeNode) =
+    and handleRangeNode parentId (node:IRangeNode) =
         if visitedRangeNodes.ContainsKey node
         then addEdge parentId visitedRangeNodes.[node]
         else
+            let node = node :?> RangeNode
             let currentId = nodesCount
             visitedRangeNodes.Add(node, currentId)
-            nodes.Add(currentId, TriplesStoredSPPFNode.RangeNode(node.InputStartPosition, node.InputEndPosition, node.RSMStartPosition, node.RSMEndPosition))
+            nodes.Add(currentId, TriplesStoredSPPFNode.RangeNode(getVertexId node.InputStartPosition,
+                                                                 getVertexId node.InputEndPosition,
+                                                                 getStateId node.RSMStartPosition,
+                                                                 getStateId node.RSMEndPosition))
             addEdge parentId currentId
             nodesCount <- nodesCount + 1
-            node.IntermediateNodes
-            |> ResizeArray.iter (handleNonRangeNode (Some currentId))
+            (node :> IRangeNode).IntermediateNodes
+            |> Seq.iter (handleNonRangeNode (Some currentId))
             
-    do  sppf |> ResizeArray.iter (handleRangeNode None)
+    do  roots |> Array.iter (handleNonTerminalNode None)
     
     let printEdge (x,y) = sprintf $"%i{x}->%i{y}"
     let printNode nodeId node =

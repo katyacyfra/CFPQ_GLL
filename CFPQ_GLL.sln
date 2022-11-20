@@ -6,6 +6,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Tests", "Tests\Tests.fsproj
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks", "Benchmarks\Benchmarks.fsproj", "{22338132-7D21-4212-9EED-73C8107E890A}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks_RPQ", "Benchmarks_RPQ\Benchmarks_RPQ.fsproj", "{E8398B32-197F-40CF-9818-712378D118D5}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks_CFPQ", "Benchmarks_CFPQ\Benchmarks_CFPQ.fsproj", "{C0F2C6AF-2FCB-4933-A8F7-6E404ED85FDE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +28,13 @@ Global
 		{22338132-7D21-4212-9EED-73C8107E890A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{22338132-7D21-4212-9EED-73C8107E890A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{22338132-7D21-4212-9EED-73C8107E890A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E8398B32-197F-40CF-9818-712378D118D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E8398B32-197F-40CF-9818-712378D118D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E8398B32-197F-40CF-9818-712378D118D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E8398B32-197F-40CF-9818-712378D118D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0F2C6AF-2FCB-4933-A8F7-6E404ED85FDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0F2C6AF-2FCB-4933-A8F7-6E404ED85FDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0F2C6AF-2FCB-4933-A8F7-6E404ED85FDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0F2C6AF-2FCB-4933-A8F7-6E404ED85FDE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
